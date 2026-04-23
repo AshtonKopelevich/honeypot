@@ -312,7 +312,7 @@ def main():
     print(f"  TTY logs   : {TTY_PATH}")
     print(f"  URL        : http://localhost:{args.port}\n")
 
-    app.run(host="localhost", port=args.port, debug=args.debug)
+    app.run(host="0.0.0.0", port=args.port, debug=args.debug)
 
 
 if __name__ == "__main__":
