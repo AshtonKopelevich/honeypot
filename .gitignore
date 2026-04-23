@@ -1,0 +1,68 @@
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────────────────────
+.venv/
+venv/
+env/
+cowrie-env/
+
+# ── Database & logs ────────────────────────────────────────────────────────
+logs/
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+*.log
+*.json.20*        # rotated cowrie logs e.g. cowrie.json.2026-04-21
+
+# ── Cowrie runtime ─────────────────────────────────────────────────────────
+cowrie/var/
+cowrie/log/
+/tmp/cowrie-src/
+*.pickle
+*.pid
+*.tty
+
+# ── Credentials & secrets ──────────────────────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+*_rsa
+*_ecdsa
+*_ed25519
+authorized_keys
+passwords.txt
+userdb.txt
+cowrie.cfg
+
+# ── Repomix & analysis artifacts ───────────────────────────────────────────
+repomix-output.*
+repomix.config.*
+
+# ── OS artifacts ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor artifacts ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Misc ───────────────────────────────────────────────────────────────────
+packages.microsoft.gpg
+honeyfs/
+/tmp/

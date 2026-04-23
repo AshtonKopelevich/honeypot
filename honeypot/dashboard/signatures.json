@@ -1,0 +1,155 @@
+{
+  "CRITICAL": [
+    {
+      "rule": "history_tampering",
+      "pattern": "history\\s+-c|rm\\s+.*bash_history|ln\\s+-sf\\s+/dev/null.*history|unset\\s+HISTFILE",
+      "description": "Attacker clearing shell history to cover tracks"
+    },
+    {
+      "rule": "reverse_shell_tcp",
+      "pattern": "bash\\s+-i.*>&.*/dev/tcp|/dev/tcp/",
+      "description": "Bash TCP reverse shell one-liner"
+    },
+    {
+      "rule": "reverse_shell_nc",
+      "pattern": "nc\\s+.*-e|ncat\\s+.*-e|netcat\\s+.*-e",
+      "description": "Netcat reverse shell with execute flag"
+    },
+    {
+      "rule": "reverse_shell_python",
+      "pattern": "python.*socket.*subprocess|python.*os.dup2",
+      "description": "Python reverse shell one-liner"
+    },
+    {
+      "rule": "obfuscated_execution",
+      "pattern": "base64\\s+-d.*\\|.*bash|base64\\s+-d.*\\|.*sh|echo.*\\|\\s*base64\\s*-d",
+      "description": "Base64 encoded command piped to shell execution"
+    },
+    {
+      "rule": "log_deletion",
+      "pattern": "rm\\s+-rf.*/var/log|echo\\s+\"\"\\s*>.*auth\\.log|>\\s*/var/log/",
+      "description": "Attacker wiping system logs"
+    },
+    {
+      "rule": "shadow_access",
+      "pattern": "cat\\s+/etc/shadow|chmod.*shadow|cp\\s+/etc/shadow",
+      "description": "Direct access to shadow password file"
+    },
+    {
+      "rule": "ssh_key_injection",
+      "pattern": "echo.*authorized_keys|>>\\s*~/.ssh/authorized_keys|tee.*authorized_keys",
+      "description": "Adding unauthorized SSH key for persistence"
+    }
+  ],
+
+  "HIGH": [
+    {
+      "rule": "sudo_enumeration",
+      "pattern": "sudo\\s+-l",
+      "description": "Checking available sudo privileges"
+    },
+    {
+      "rule": "suid_hunting",
+      "pattern": "find.*-perm\\s+-u=s|find.*-perm\\s+/4000|find.*-perm\\s+-4000",
+      "description": "Searching for SUID binaries for privilege escalation"
+    },
+    {
+      "rule": "download_script",
+      "pattern": "wget.*\\.sh|curl.*\\.sh|wget.*\\.py|curl.*\\.py|wget.*/tmp/|curl.*/tmp/",
+      "description": "Downloading executable script from remote host"
+    },
+    {
+      "rule": "known_exploit_tools",
+      "pattern": "linpeas|linenum|linux-exploit|dirtycow|pwnkit|polkit|dirty_pipe",
+      "description": "Known Linux privilege escalation tool or exploit"
+    },
+    {
+      "rule": "cron_persistence",
+      "pattern": "crontab\\s+-e|echo.*cron\\.daily|echo.*cron\\.hourly|tee.*/etc/cron",
+      "description": "Establishing persistence via cron job"
+    },
+    {
+      "rule": "tmp_execution",
+      "pattern": "chmod.*\\+x\\s+/tmp/|bash\\s+/tmp/|sh\\s+/tmp/|python.*\\/tmp/|perl.*/tmp/",
+      "description": "Executing payload from /tmp directory"
+    },
+    {
+      "rule": "devshm_execution",
+      "pattern": "/dev/shm/|/var/tmp/.*\\.sh|bash\\s+/var/tmp/",
+      "description": "Executing payload from volatile or world-writable directory"
+    },
+    {
+      "rule": "passwd_access",
+      "pattern": "cat\\s+/etc/passwd|less\\s+/etc/passwd|more\\s+/etc/passwd",
+      "description": "Reading system password file"
+    },
+    {
+      "rule": "startup_persistence",
+      "pattern": "~/.bashrc|~/.profile|/etc/rc\\.local|/etc/profile\\.d/",
+      "description": "Modifying shell startup scripts for persistence"
+    },
+    {
+      "rule": "lateral_ssh",
+      "pattern": "ssh\\s+\\w+@[0-9]+\\.|ssh\\s+-i.*@",
+      "description": "SSH connection attempt to another host"
+    },
+    {
+      "rule": "exfiltration",
+      "pattern": "scp\\s+.*@|rsync.*@.*::|tar.*\\|.*nc|curl.*-T|curl.*--upload",
+      "description": "Data exfiltration via scp, rsync, or curl upload"
+    },
+    {
+      "rule": "credential_file_access",
+      "pattern": "cat\\s+.*\\.env|cat\\s+.*passwords|cat\\s+.*credentials|cat\\s+.*secrets",
+      "description": "Reading credential or secret files"
+    }
+  ],
+
+  "MEDIUM": [
+    {
+      "rule": "system_fingerprint",
+      "pattern": "uname\\s+-a|uname\\s+-r|cat\\s+/etc/os-release|hostnamectl",
+      "description": "System version and kernel fingerprinting"
+    },
+    {
+      "rule": "user_enumeration",
+      "pattern": "^whoami$|^id$|^groups$|id\\s+\\w+",
+      "description": "Checking current user identity and group membership"
+    },
+    {
+      "rule": "network_discovery",
+      "pattern": "ifconfig|ip\\s+a|ip\\s+addr|netstat\\s+-|ss\\s+-|route\\s+-n|arp\\s+-a",
+      "description": "Network interface and routing enumeration"
+    },
+    {
+      "rule": "process_discovery",
+      "pattern": "ps\\s+aux|ps\\s+-ef|pstree",
+      "description": "Running process enumeration"
+    },
+    {
+      "rule": "filesystem_hunting",
+      "pattern": "find\\s+/\\s+-name|find\\s+/home|find\\s+/root|find\\s+/var\\s+-name",
+      "description": "Broad filesystem search for sensitive files"
+    },
+    {
+      "rule": "config_hunting",
+      "pattern": "find.*\\.conf|find.*\\.config|find.*\\.cfg|ls\\s+-la\\s+/etc/",
+      "description": "Searching for configuration files"
+    },
+    {
+      "rule": "ssh_recon",
+      "pattern": "cat\\s+~/.ssh/known_hosts|ls\\s+-la\\s+~/.ssh|cat\\s+~/.ssh/config",
+      "description": "Enumerating SSH configuration and known hosts"
+    },
+    {
+      "rule": "hostname_recon",
+      "pattern": "^hostname$|cat\\s+/etc/hostname|cat\\s+/etc/hosts",
+      "description": "Hostname and hosts file enumeration"
+    },
+    {
+      "rule": "download_tool",
+      "pattern": "wget\\s+http|curl\\s+http|curl\\s+-O|curl\\s+-o",
+      "description": "Downloading file from remote host"
+    }
+  ]
+}

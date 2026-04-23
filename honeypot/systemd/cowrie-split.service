@@ -1,0 +1,10 @@
+[Unit]
+Description=Rebuild Cowrie analysis DB after log update
+After=network.target
+
+[Service]
+Type=oneshot
+User=cowrie
+Group=cowrie
+ExecStart=/bin/bash /home/cowrie/honeypot/scripts/split_cowrie.sh
+Nice=10

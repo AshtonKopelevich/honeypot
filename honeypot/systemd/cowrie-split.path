@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch Cowrie JSONL log for changes
+
+[Path]
+PathModified=/home/cowrie/honeypot/logs/raw-logs/cowrie.json
+
+[Install]
+WantedBy=multi-user.target

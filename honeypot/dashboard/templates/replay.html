@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+
+{% block title %}Replay {{ session_id[:12] }} — Honeypot Dashboard{% endblock %}
+
+{% block extra_head %}
+<style>
+  .replay-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .replay-layout { grid-template-columns: 1fr; }
+  }
+
+  /* ── Terminal ── */
+  .terminal-wrap {
+    background: #050709;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .terminal-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .terminal-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border2);
+  }
+
+  .terminal-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.12em;
+  }
+
+  .terminal-body {
+    padding: 16px;
+    height: 520px;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: #c8d8c8;
+    white-space: pre-wrap;
+    word-break: break-all;
+    scroll-behavior: smooth;
+  }
+
+  .terminal-body::-webkit-scrollbar { width: 4px; }
+  .terminal-body::-webkit-scrollbar-track { background: transparent; }
+  .terminal-body::-webkit-scrollbar-thumb { background: var(--border2); }
+
+  /* ── Error state inside terminal ── */
+  .terminal-error {
+    padding: 24px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.9;
+  }
+
+  .terminal-error .err-title {
+    color: var(--danger);
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .terminal-error .err-key   { color: var(--dim); }
+  .terminal-error .err-value { color: var(--text); }
+
+  .terminal-error .err-hint {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    color: var(--dim);
+    font-size: 10px;
+    line-height: 2;
+  }
+
+  /* ── Controls ── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .ctrl-btn {
+    background: none;
+    border: 1px solid var(--border2);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+
+  .ctrl-btn:hover   { border-color: var(--accent); color: var(--accent); }
+  .ctrl-btn.primary { border-color: var(--accent); color: var(--accent); }
+  .ctrl-btn:disabled { opacity: 0.3; cursor: default; }
+
+  .speed-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    margin-left: 4px;
+  }
+
+  .progress-wrap {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    position: relative;
+    cursor: pointer;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.1s linear;
+    pointer-events: none;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar-card { margin-bottom: 12px; }
+
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(28,37,51,0.5);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .meta-row:last-child { border-bottom: none; }
+  .meta-key   { color: var(--dim); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; }
+  .meta-value { color: var(--text); }
+
+  .status-line {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    padding: 8px 0 0;
+    text-align: center;
+  }
+
+  .status-line.playing { color: var(--ok); }
+  .status-line.done    { color: var(--accent); }
+  .status-line.error   { color: var(--danger); }
+  .status-line.loading { color: var(--warn); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="page-title">// TTY Replay</div>
+  <div class="page-subtitle">
+    Session {{ session_id[:12] }} &nbsp;·&nbsp; {{ session.src_ip }}
+  </div>
+  <a href="/session/{{ session_id }}"
+     style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:0.1em;">
+    ← Back to session
+  </a>
+</div>
+
+<div class="replay-layout">
+
+  <!-- Terminal -->
+  <div>
+    <div class="terminal-wrap">
+      <div class="terminal-titlebar">
+        <div class="terminal-dots">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="terminal-title">root@honeypot — ssh session {{ session_id[:12] }}</div>
+        <div></div>
+      </div>
+
+      <div class="terminal-body" id="termBody"></div>
+
+      <div class="controls">
+        <button class="ctrl-btn primary" id="btnPlay"  onclick="play()" disabled>▶ Play</button>
+        <button class="ctrl-btn"        id="btnPause" onclick="pause()" disabled>⏸ Pause</button>
+        <button class="ctrl-btn"        id="btnReset" onclick="reset()">↺ Reset</button>
+
+        <div class="progress-wrap" id="progressWrap" onclick="seekClick(event)">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <span class="speed-label">Speed:</span>
+        <button class="ctrl-btn" onclick="setSpeed(0.5)">½×</button>
+        <button class="ctrl-btn" onclick="setSpeed(1)">1×</button>
+        <button class="ctrl-btn" onclick="setSpeed(2)">2×</button>
+        <button class="ctrl-btn" onclick="setSpeed(5)">5×</button>
+      </div>
+    </div>
+
+    <div class="status-line loading" id="statusLine">Loading TTY log…</div>
+  </div>
+
+  <!-- Sidebar -->
+  <div>
+
+    <div class="card sidebar-card">
+      <div class="card-header"><div class="card-title">Session Info</div></div>
+      <div class="card-body">
+        <div class="meta-row">
+          <span class="meta-key">IP</span>
+          <span class="meta-value">{{ session.src_ip }}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">Date</span>
+          <span class="meta-value">{{ session.start_time[:10] if session.start_time else '—' }}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">Duration</span>
+          <span class="meta-value">
+            {% if session.duration_seconds %}
+              {{ session.duration_seconds | int }}s
+            {% else %}—{% endif %}
+          </span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">Commands</span>
+          <span class="meta-value">{{ session.commands_run }}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">Client</span>
+          <span class="meta-value" style="font-size:9px;word-break:break-all;">
+            {{ session.client_version or '—' }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card sidebar-card">
+      <div class="card-header"><div class="card-title">Playback</div></div>
+      <div class="card-body">
+        <div class="meta-row">
+          <span class="meta-key">Frame</span>
+          <span class="meta-value" id="sidePos">— / —</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">Time</span>
+          <span class="meta-value" id="sideTime">0.0s</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">Speed</span>
+          <span class="meta-value" id="sideSpeed">1×</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-key">Status</span>
+          <span class="meta-value" id="sideStatus">Loading</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">Note</div></div>
+      <div class="card-body">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.7;">
+          Replay uses real frame timestamps — timing reflects actual attacker input speed.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const SESSION_ID = "{{ session_id }}";
+
+  let frames   = [];
+  let frameIdx = 0;
+  let speed    = 1.0;
+  let playing  = false;
+  let timer    = null;
+  let loaded   = false;
+
+  const CHUNK    = 8;
+  const TICK_MS  = 30;
+
+  // ── DOM refs ──
+  const termBody     = document.getElementById('termBody');
+  const progressFill = document.getElementById('progressFill');
+  const statusLine   = document.getElementById('statusLine');
+  const btnPlay      = document.getElementById('btnPlay');
+  const btnPause     = document.getElementById('btnPause');
+  const sidePos      = document.getElementById('sidePos');
+  const sideTime     = document.getElementById('sideTime');
+  const sideSpeed    = document.getElementById('sideSpeed');
+  const sideStatus   = document.getElementById('sideStatus');
+
+  // ── Load ──────────────────────────────────────────────────────────────
+  async function loadTTY() {
+    setStatus('loading', 'Loading TTY log…');
+    let json;
+    try {
+      const res = await fetch(`/api/tty/${SESSION_ID}`);
+      json = await res.json();
+    } catch (err) {
+      showError('Network error — could not reach /api/tty endpoint', {
+        'Session ID': SESSION_ID,
+        'Detail': err.message,
+      });
+      return;
+    }
+
+    if (json.error) {
+      showError('TTY log not available', {
+        'Session ID': SESSION_ID,
+        'Server says': json.error,
+        'Path': json.path || '—',
+      });
+      return;
+    }
+
+    try {
+      frames = parseUML(new Uint8Array(json.data));
+    } catch (err) {
+      showError('Failed to parse TTY data', {
+        'Session ID': SESSION_ID,
+        'Error': err.message,
+      });
+      return;
+    }
+
+    if (frames.length === 0) {
+      showError('TTY file contains no output frames', {
+        'Bytes received': json.size_bytes,
+      });
+      return;
+    }
+
+    loaded = true;
+    btnPlay.disabled = false;
+    setStatus('idle', `Ready — ${frames.length} frames · press Play`);
+    updateSidebar();
+  }
+
+  // ── UML parser with deduplication ─────────────────────────────────────
+  // Header: [type u32le][unknown u32le][length u32le][unknown u32le][sec u32le][usec u32le]
+  // type 3 = output frame. Cowrie records both the terminal echo and the
+  // shell output as separate consecutive single-byte frames, producing
+  // doubled characters. We deduplicate by dropping a frame when it is a
+  // single printable byte that is identical to the previous single-byte frame.
+  function parseUML(bytes) {
+    const view   = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const result = [];
+    let   offset    = 0;
+    let   firstSec  = null, firstUsec = null;
+    let   lastSingleByte = -1; // track previous single printable byte for dedup
+
+    while (offset + 24 <= bytes.length) {
+      const type   = view.getUint32(offset,      true);
+      const length = view.getUint32(offset + 8,  true);
+      const sec    = view.getUint32(offset + 16, true);
+      const usec   = view.getUint32(offset + 20, true);
+      offset += 24;
+
+      if (offset + length > bytes.length) break;
+      const data = bytes.slice(offset, offset + length);
+      offset += length;
+
+      // Skip non-output frames
+      if (type !== 3) continue;
+
+      // Deduplicate consecutive identical single printable-ASCII byte frames
+      if (length === 1 && data[0] >= 32 && data[0] < 127) {
+        if (data[0] === lastSingleByte) {
+          lastSingleByte = -1; // reset so a triple doesn't get triple-dropped
+          continue;
+        }
+        lastSingleByte = data[0];
+      } else {
+        lastSingleByte = -1;
+      }
+
+      if (firstSec === null) { firstSec = sec; firstUsec = usec; }
+
+      const absMs  = (sec - firstSec) * 1000 + (usec - firstUsec) / 1000;
+      const prevMs = result.length > 0 ? result[result.length - 1]._absMs : 0;
+
+      result.push({ delayMs: Math.max(0, absMs - prevMs), data, _absMs: absMs });
+    }
+
+    return result;
+  }
+
+  // ── Playback controls ─────────────────────────────────────────────────
+  function play() {
+    if (!loaded) return;
+    if (frameIdx >= frames.length) reset();
+    playing = true;
+    btnPlay.disabled  = true;
+    btnPause.disabled = false;
+    setStatus('playing', 'Playing…');
+    scheduleNext();
+  }
+
+  function pause() {
+    playing = false;
+    clearTimeout(timer);
+    btnPlay.disabled  = false;
+    btnPause.disabled = true;
+    setStatus('idle', 'Paused');
+  }
+
+  function reset() {
+    pause();
+    frameIdx = 0;
+    termBody.textContent = '';
+    progressFill.style.width = '0%';
+    setStatus('idle', `Ready — ${frames.length} frames · press Play`);
+    updateSidebar();
+    btnPlay.disabled = false;
+  }
+
+  function setSpeed(s) {
+    speed = s;
+    sideSpeed.textContent = s + '×';
+  }
+
+  // ── Frame scheduler ───────────────────────────────────────────────────
+  const MAX_DELAY_MS = 3000;
+  const MIN_DELAY_MS = 8;
+
+  function scheduleNext() {
+    if (!playing || frameIdx >= frames.length) {
+      if (frameIdx >= frames.length) {
+        playing = false;
+        btnPlay.disabled  = false;
+        btnPause.disabled = true;
+        setStatus('done', 'Replay complete');
+      }
+      return;
+    }
+
+    const frame = frames[frameIdx];
+    const delay = Math.min(Math.max(frame.delayMs / speed, MIN_DELAY_MS), MAX_DELAY_MS / speed);
+
+    timer = setTimeout(() => {
+      writeBytes(frame.data);
+      frameIdx++;
+      updateProgress();
+      updateSidebar();
+      scheduleNext();
+    }, delay);
+  }
+
+  // ── Terminal renderer ─────────────────────────────────────────────────
+  function writeBytes(bytes) {
+    let str = '';
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes[i];
+      if (b === 10 || b === 13) {
+        str += '\n';
+      } else if (b === 9) {
+        str += '    ';
+      } else if (b === 8) {
+        if (str.length > 0) {
+          str = str.slice(0, -1);
+        } else {
+          termBody.textContent = termBody.textContent.slice(0, -1);
+        }
+      } else if (b >= 32 && b < 127) {
+        str += String.fromCharCode(b);
+      } else if (b === 27) {
+        i = skipEscapeSequence(bytes, i);
+      }
+    }
+    if (str) {
+      termBody.textContent += str;
+      termBody.scrollTop = termBody.scrollHeight;
+    }
+  }
+
+  function skipEscapeSequence(bytes, i) {
+    i++; // skip ESC
+    if (i >= bytes.length) return i;
+    if (bytes[i] === 91) { // CSI: ESC [
+      i++;
+      while (i < bytes.length && (bytes[i] < 0x40 || bytes[i] > 0x7E)) i++;
+    } else if (bytes[i] === 93) { // OSC: ESC ]
+      while (i < bytes.length && bytes[i] !== 7 && !(bytes[i] === 27 && bytes[i+1] === 92)) i++;
+    }
+    return i;
+  }
+
+  // ── Seek ──────────────────────────────────────────────────────────────
+  function seekClick(e) {
+    if (!loaded) return;
+    const rect   = e.currentTarget.getBoundingClientRect();
+    const pct    = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const target = Math.floor(pct * frames.length);
+
+    const wasPlaying = playing;
+    pause();
+    termBody.textContent = '';
+    for (let i = 0; i < target; i++) writeBytes(frames[i].data);
+    frameIdx = target;
+    updateProgress();
+    updateSidebar();
+    if (wasPlaying) play();
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────────────
+  function updateProgress() {
+    progressFill.style.width = frames.length
+      ? (frameIdx / frames.length * 100) + '%' : '0%';
+  }
+
+  function updateSidebar() {
+    sidePos.textContent  = `${frameIdx} / ${frames.length}`;
+    sideTime.textContent = frameIdx > 0
+      ? (frames[frameIdx - 1]._absMs / 1000).toFixed(1) + 's' : '0.0s';
+    sideStatus.textContent = playing ? 'Playing'
+      : (frameIdx >= frames.length && frames.length > 0 ? 'Done' : 'Idle');
+  }
+
+  function setStatus(type, msg) {
+    statusLine.textContent = msg;
+    statusLine.className   = 'status-line ' + type;
+    sideStatus.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+  }
+
+  function showError(title, fields, hints) {
+    btnPlay.disabled = true;
+    let html = `<div class="terminal-error">`;
+    html += `<div class="err-title">✕ ${title}</div>`;
+    for (const [k, v] of Object.entries(fields)) {
+      html += `<div><span class="err-key">${k}:</span> &nbsp;<span class="err-value">${v}</span></div>`;
+    }
+    if (hints && hints.length) {
+      html += `<div class="err-hint">` + hints.map(h => `• ${h}`).join('<br>') + `</div>`;
+    }
+    html += `</div>`;
+    termBody.innerHTML = html;
+    setStatus('error', title);
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────
+  loadTTY();
+</script>
+{% endblock %}

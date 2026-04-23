@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% block title %}Session {{ session.session_id[:12] }} — Honeypot Dashboard{% endblock %}
+
+{% block extra_head %}
+<style>
+  .session-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 1000px) {
+    .session-layout { grid-template-columns: 1fr; }
+  }
+
+  /* ── Threat banner ── */
+  .threat-banner {
+    padding: 14px 18px;
+    border: 1px solid;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    animation: fadein 0.3s ease both;
+  }
+
+  .threat-banner.critical { border-color: var(--danger); background: rgba(255,51,85,0.06); }
+  .threat-banner.high     { border-color: var(--warn);   background: rgba(255,170,0,0.06); }
+  .threat-banner.medium   { border-color: var(--accent); background: var(--accent-dim); }
+  .threat-banner.low      { border-color: var(--border2); background: transparent; }
+
+  .threat-score {
+    font-family: var(--mono);
+    font-size: 40px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .threat-banner.critical .threat-score { color: var(--danger); }
+  .threat-banner.high     .threat-score { color: var(--warn); }
+  .threat-banner.medium   .threat-score { color: var(--accent); }
+  .threat-banner.low      .threat-score { color: var(--dim); }
+
+  .threat-info { flex: 1; }
+
+  .threat-label {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .threat-banner.critical .threat-label { color: var(--danger); }
+  .threat-banner.high     .threat-label { color: var(--warn); }
+  .threat-banner.medium   .threat-label { color: var(--accent); }
+  .threat-banner.low      .threat-label { color: var(--dim); }
+
+  .threat-hits {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Hit list ── */
+  .hit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .hit-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .hit-severity {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    border: 1px solid;
+  }
+
+  .hit-severity.CRITICAL   { color: var(--danger); border-color: var(--danger); }
+  .hit-severity.HIGH       { color: var(--warn);   border-color: var(--warn); }
+  .hit-severity.MEDIUM     { color: var(--accent); border-color: var(--accent); }
+  .hit-severity.BEHAVIORAL { color: var(--ok);     border-color: var(--ok); }
+
+  .hit-detail { color: var(--text); flex: 1; }
+  .hit-cmd    { color: var(--dim);  font-size: 10px; margin-top: 2px; word-break: break-all; }
+
+  /* ── Event timeline ── */
+  .timeline-container {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+
+  .timeline-container::-webkit-scrollbar {
+    width: 6px;
+  }
+  .timeline-container::-webkit-scrollbar-track {
+    background: var(--surface2);
+  }
+  .timeline-container::-webkit-scrollbar-thumb {
+    background: var(--border2);
+    border-radius: 3px;
+  }
+  .timeline-container::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+  }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .tl-row {
+    display: grid;
+    grid-template-columns: 90px 180px 1fr;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(28,37,51,0.5);
+    font-family: var(--mono);
+    font-size: 11px;
+    align-items: start;
+  }
+
+  .tl-row:last-child { border-bottom: none; }
+
+  .tl-time {
+    color: var(--dim);
+    font-size: 10px;
+    padding-top: 1px;
+    white-space: nowrap;
+  }
+
+  .tl-event { white-space: nowrap; }
+
+  .tl-event.connect  { color: var(--ok); }
+  .tl-event.closed   { color: var(--dim); }
+  .tl-event.login-ok { color: var(--ok); }
+  .tl-event.login-fail { color: var(--danger); }
+  .tl-event.command  { color: var(--warn); }
+  .tl-event.kex      { color: var(--accent); }
+  .tl-event.default  { color: var(--dim); }
+
+  .tl-msg { color: var(--text); word-break: break-word; }
+
+  /* ── Auth table ── */
+  .auth-row-ok   td { color: var(--ok); }
+  .auth-row-fail td { color: var(--dim); }
+
+  /* ── Meta grid ── */
+  .meta-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(28,37,51,0.5);
+    font-family: var(--mono);
+    font-size: 11px;
+    gap: 8px;
+  }
+
+  .meta-row:last-child { border-bottom: none; }
+  .meta-key   { color: var(--dim); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; flex-shrink: 0; }
+  .meta-value { color: var(--text); text-align: right; word-break: break-all; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="page-title">// Session</div>
+  <div class="page-subtitle">{{ session.session_id[:12] }} &nbsp;·&nbsp; {{ session.src_ip }}</div>
+  <a href="/sessions"
+     style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:0.1em;">
+    ← Back to sessions
+  </a>
+</div>
+
+{% set label = threat.label | lower %}
+<div class="threat-banner {{ label }}">
+  <div class="threat-score">{{ threat.score }}</div>
+  <div class="threat-info">
+    <div class="threat-label">{{ threat.label }} Threat</div>
+    <div class="threat-hits">
+      {{ threat.hits | length }} rule{{ 's' if threat.hits | length != 1 else '' }} triggered
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-left:auto;">
+    <a href="/session/{{ session.session_id }}/export"
+       style="
+         font-family:var(--mono);font-size:10px;letter-spacing:0.12em;
+         padding:8px 14px;border:1px solid var(--ok);
+         color:var(--ok);text-decoration:none;white-space:nowrap;text-align:center;
+       ">
+      ↓ Export JSON
+    </a>
+    {% if tty_file %}
+    <a href="/replay/{{ session.session_id }}"
+       style="
+         font-family:var(--mono);font-size:10px;letter-spacing:0.12em;
+         padding:8px 14px;border:1px solid currentColor;
+         color:var(--accent);text-decoration:none;white-space:nowrap;text-align:center;
+       ">
+      ▶ Replay TTY
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="session-layout">
+
+  <div>
+
+    {% if threat.hits %}
+    <div class="section-label mb-8">Threat Detections</div>
+    <div class="hit-list mb-24">
+      {% for hit in threat.hits %}
+      <div class="hit-row">
+        <div class="hit-severity {{ hit.severity }}">{{ hit.severity }}</div>
+        <div>
+          <div class="hit-detail">{{ hit.detail }}</div>
+          {% if hit.command %}
+          <div class="hit-cmd">$ {{ hit.command }}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="section-label mb-8">Event Timeline</div>
+    <div class="card mb-16">
+      <div class="card-body" style="padding:0 16px;">
+        {% if events %}
+        <div class="timeline-container">
+          <div class="timeline">
+            {% for ev in events %}
+            {% set ts = ev.timestamp[11:19] if ev.timestamp else '—' %}
+
+            {% if 'connect' in ev.event_id %}
+              {% set cls = 'connect' %}
+            {% elif 'closed' in ev.event_id %}
+              {% set cls = 'closed' %}
+            {% elif 'login.success' in ev.event_id %}
+              {% set cls = 'login-ok' %}
+            {% elif 'login.failed' in ev.event_id %}
+              {% set cls = 'login-fail' %}
+            {% elif 'command' in ev.event_id %}
+              {% set cls = 'command' %}
+            {% elif 'kex' in ev.event_id or 'version' in ev.event_id %}
+              {% set cls = 'kex' %}
+            {% else %}
+              {% set cls = 'default' %}
+            {% endif %}
+
+            <div class="tl-row">
+              <div class="tl-time">{{ ts }}</div>
+              <div class="tl-event {{ cls }}">{{ ev.event_id | replace('cowrie.', '') }}</div>
+              <div class="tl-msg">{{ ev.message }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% else %}
+          <div class="empty" style="padding: 16px;">No events recorded.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if auth %}
+    <div class="section-label mb-8">Auth Attempts</div>
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Username</th>
+            <th>Password</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in auth %}
+          <tr class="{{ 'auth-row-ok' if a.success else 'auth-row-fail' }}">
+            <td>{{ a.timestamp[11:19] if a.timestamp else '—' }}</td>
+            <td>{{ a.username }}</td>
+            <td>{{ a.password }}</td>
+            <td>
+              {% if a.success %}
+                <span class="badge badge-ok">SUCCESS</span>
+              {% else %}
+                <span class="badge badge-fail">FAILED</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <div>
+
+    <div class="card mb-16">
+      <div class="card-header"><div class="card-title">Session Metadata</div></div>
+      <div class="card-body" style="padding:0 16px;">
+        <div class="meta-grid">
+          <div class="meta-row">
+            <span class="meta-key">Session ID</span>
+            <span class="meta-value">{{ session.session_id[:12] }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Source IP</span>
+            <span class="meta-value">{{ session.src_ip }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Date</span>
+            <span class="meta-value">{{ session.date or '—' }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Start</span>
+            <span class="meta-value">{{ session.start_time[11:19] if session.start_time else '—' }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">End</span>
+            <span class="meta-value">{{ session.end_time[11:19] if session.end_time else '—' }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Duration</span>
+            <span class="meta-value">{{ session.duration_seconds | int }}s</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Protocol</span>
+            <span class="meta-value">{{ session.protocol | upper }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Login</span>
+            <span class="meta-value">
+              {% if session.login_success %}
+                <span class="badge badge-ok">SUCCESS</span>
+              {% else %}
+                <span class="badge badge-fail">FAILED</span>
+              {% endif %}
+            </span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">User</span>
+            <span class="meta-value">{{ login_user or '—' }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Commands</span>
+            <span class="meta-value">{{ session.commands_run }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">Downloads</span>
+            <span class="meta-value">{{ session.files_downloaded }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-16">
+      <div class="card-header"><div class="card-title">Client Fingerprint</div></div>
+      <div class="card-body" style="padding:0 16px;">
+        <div class="meta-grid">
+          <div class="meta-row">
+            <span class="meta-key">Version</span>
+            <span class="meta-value" style="font-size:10px;">{{ session.client_version or '—' }}</span>
+          </div>
+          <div class="meta-row">
+            <span class="meta-key">HASSH</span>
+            <span class="meta-value" style="font-size:10px;word-break:break-all;">{{ session.hassh or '—' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    {% if tty_file %}
+    <a href="/replay/{{ session.session_id }}" style="display:block;text-decoration:none;">
+      <div style="
+        padding:14px;border:1px solid var(--accent);
+        font-family:var(--mono);font-size:11px;
+        color:var(--accent);letter-spacing:0.12em;
+        text-align:center;
+        transition:background 0.2s;
+      "
+      onmouseover="this.style.background='var(--accent-dim)'"
+      onmouseout="this.style.background='transparent'">
+        ▶ &nbsp; REPLAY TTY SESSION
+      </div>
+    </a>
+    {% else %}
+    <div style="
+      padding:14px;border:1px solid var(--border2);
+      font-family:var(--mono);font-size:10px;
+      color:var(--dim);letter-spacing:0.1em;
+      text-align:center;
+    ">
+      No TTY log available
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

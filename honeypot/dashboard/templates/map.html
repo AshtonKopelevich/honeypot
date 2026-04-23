@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+
+{% block title %}IP Map — Honeypot Dashboard{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  .map-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  @media (max-width: 1000px) {
+    .map-layout { grid-template-columns: 1fr; }
+  }
+
+  /* ── Map container ── */
+  #map {
+    height: 560px;
+    background: #050709;
+    border: 1px solid var(--border);
+  }
+
+  /* Override Leaflet defaults to match dark theme */
+  .leaflet-container {
+    background: #080b0f !important;
+    font-family: var(--mono) !important;
+  }
+
+  .leaflet-tile {
+    filter: invert(1) hue-rotate(180deg) brightness(0.7) saturate(0.4);
+  }
+
+  .leaflet-control-zoom a {
+    background: var(--surface) !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+    font-family: var(--mono) !important;
+  }
+
+  .leaflet-control-zoom a:hover {
+    background: var(--surface2) !important;
+    color: var(--accent) !important;
+  }
+
+  .leaflet-control-attribution {
+    background: rgba(8,11,15,0.8) !important;
+    color: var(--dim) !important;
+    font-size: 9px !important;
+  }
+
+  .leaflet-control-attribution a { color: var(--dim) !important; }
+
+  /* ── Custom popup ── */
+  .leaflet-popup-content-wrapper {
+    background: var(--surface) !important;
+    border: 1px solid var(--border2) !important;
+    border-radius: 0 !important;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6) !important;
+    color: var(--text) !important;
+  }
+
+  .leaflet-popup-tip {
+    background: var(--surface) !important;
+  }
+
+  .leaflet-popup-content {
+    font-family: var(--mono) !important;
+    font-size: 11px !important;
+    margin: 12px 14px !important;
+    color: var(--text) !important;
+    line-height: 1.7 !important;
+  }
+
+  .popup-ip {
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+
+  .popup-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .popup-key  { color: var(--dim); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; }
+  .popup-val  { color: var(--text); }
+
+  .popup-link {
+    display: block;
+    margin-top: 8px;
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-decoration: none;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+
+  .popup-link:hover { text-decoration: underline; }
+
+  /* ── Sidebar ── */
+  .ip-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 480px;
+    overflow-y: auto;
+  }
+
+  .ip-list::-webkit-scrollbar { width: 3px; }
+  .ip-list::-webkit-scrollbar-thumb { background: var(--border2); }
+
+  .ip-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .ip-card:hover       { border-color: var(--accent); }
+  .ip-card.highlighted { border-color: var(--accent); background: var(--accent-dim); }
+
+  .ip-card-addr {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .ip-card-meta {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .ip-card-meta span { white-space: nowrap; }
+
+  .ip-card-loc {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+    margin-top: 3px;
+  }
+
+  /* ── Loading overlay ── */
+  .map-loading {
+    position: absolute;
+    inset: 0;
+    background: rgba(8,11,15,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 0.15em;
+    z-index: 1000;
+    pointer-events: none;
+  }
+
+  .map-wrap { position: relative; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="page-title">// IP Map</div>
+  <div class="page-subtitle">Attack origin — {{ ip_data | length }} unique IP{{ 's' if ip_data | length != 1 else '' }}</div>
+</div>
+
+<div class="map-layout">
+
+  <!-- Map -->
+  <div>
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="map-loading" id="mapLoading">RESOLVING LOCATIONS…</div>
+    </div>
+  </div>
+
+  <!-- Sidebar IP list -->
+  <div>
+    <div class="section-label mb-8">Source IPs</div>
+    <div class="card">
+      <div class="card-body" style="padding:12px;">
+        <div class="ip-list" id="ipList">
+          {% for ip in ip_data %}
+          <div class="ip-card" id="ipc-{{ loop.index }}" onclick="focusIP({{ loop.index }})">
+            <div class="ip-card-addr">{{ ip.src_ip }}</div>
+            <div class="ip-card-loc" id="loc-{{ loop.index }}">Resolving…</div>
+            <div class="ip-card-meta">
+              <span>{{ ip.session_count }} session{{ 's' if ip.session_count != 1 else '' }}</span>
+              <span>{{ ip.total_commands or 0 }} cmds</span>
+              {% if ip.successful_logins %}
+              <span style="color:var(--danger);">{{ ip.successful_logins }} login{{ 's' if ip.successful_logins != 1 else '' }}</span>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // IP data passed from Flask
+  const IP_DATA = {{ ip_data | tojson }};
+
+  // Map setup
+  const map = L.map('map', {
+    center: [20, 0],
+    zoom: 2,
+    zoomControl: true,
+    attributionControl: true,
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 18,
+  }).addTo(map);
+
+  // Store markers keyed by index for sidebar focusing
+  const markers = {};
+
+  // Custom circle marker style by session count
+  function markerStyle(sessionCount, hasSuccess) {
+    const radius = Math.min(6 + sessionCount * 2, 20);
+    return {
+      radius,
+      fillColor:   hasSuccess ? '#ff3355' : '#00e5ff',
+      color:       hasSuccess ? '#ff3355' : '#00e5ff',
+      weight: 1,
+      opacity: 0.9,
+      fillOpacity: 0.25,
+    };
+  }
+
+  function popupHTML(ip, geo, idx) {
+    const loc = geo
+      ? `${geo.city || ''}${geo.city ? ', ' : ''}${geo.country || 'Unknown'}`
+      : 'Location unknown';
+
+    return `
+      <div class="popup-ip">${ip.src_ip}</div>
+      <div style="color:var(--dim);font-size:10px;margin-bottom:8px;">${loc}</div>
+      <div class="popup-row">
+        <span class="popup-key">Sessions</span>
+        <span class="popup-val">${ip.session_count}</span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-key">Commands</span>
+        <span class="popup-val">${ip.total_commands || 0}</span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-key">Logins</span>
+        <span class="popup-val" style="color:${ip.successful_logins ? 'var(--danger)' : 'var(--dim)'}">
+          ${ip.successful_logins || 0}
+        </span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-key">First seen</span>
+        <span class="popup-val">${(ip.first_seen || '—').slice(0, 10)}</span>
+      </div>
+      <a class="popup-link" href="/sessions">View sessions →</a>
+    `;
+  }
+
+  // GeoIP lookup via ip-api.com (free, no key needed, 45 req/min)
+  async function geoIP(ip) {
+    // Skip private/loopback IPs — they won't resolve
+    if (ip.startsWith('127.') || ip.startsWith('192.168.') ||
+        ip.startsWith('10.')  || ip.startsWith('172.')) {
+      return null;
+    }
+    try {
+      const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,city,lat,lon`);
+      const data = await res.json();
+      return data.status === 'success' ? data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Place a marker for private IPs at a jittered default position
+  // so they still appear on the map
+  function privateIPPosition(ip, idx) {
+    // Spread private IPs across the Atlantic so they're visible but clearly grouped
+    return [10 + idx * 4, -30 + idx * 3];
+  }
+
+  function highlightCard(idx) {
+    document.querySelectorAll('.ip-card').forEach(c => c.classList.remove('highlighted'));
+    const card = document.getElementById(`ipc-${idx}`);
+    if (card) {
+      card.classList.add('highlighted');
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function focusIP(idx) {
+    const marker = markers[idx];
+    if (marker) {
+      map.setView(marker.getLatLng(), 6, { animate: true });
+      marker.openPopup();
+    }
+    highlightCard(idx);
+  }
+
+  // Resolve all IPs and place markers
+  async function resolveAll() {
+    const promises = IP_DATA.map(async (ip, i) => {
+      const idx = i + 1; // 1-based to match Jinja loop.index
+      const geo = await geoIP(ip.src_ip);
+
+      let lat, lon;
+      if (geo) {
+        lat = geo.lat;
+        lon = geo.lon;
+      } else {
+        [lat, lon] = privateIPPosition(ip.src_ip, i);
+      }
+
+      const style  = markerStyle(ip.session_count, ip.successful_logins > 0);
+      const marker = L.circleMarker([lat, lon], style).addTo(map);
+      marker.bindPopup(popupHTML(ip, geo, idx), { maxWidth: 220 });
+
+      // Click marker → highlight sidebar card
+      marker.on('click', () => highlightCard(idx));
+
+      markers[idx] = marker;
+
+      // Update sidebar location text
+      const locEl = document.getElementById(`loc-${idx}`);
+      if (locEl) {
+        locEl.textContent = geo
+          ? `${geo.city || ''}${geo.city ? ', ' : ''}${geo.country}`
+          : (ip.src_ip.startsWith('127.') || ip.src_ip.startsWith('192.168.') || ip.src_ip.startsWith('10.')
+              ? 'Private / local address'
+              : 'Location unavailable');
+      }
+    });
+
+    await Promise.all(promises);
+
+    // Hide loading overlay once all resolved
+    document.getElementById('mapLoading').style.display = 'none';
+  }
+
+  resolveAll();
+</script>
+{% endblock %}

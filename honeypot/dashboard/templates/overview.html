@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Overview — Honeypot Dashboard{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  .overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .overview-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+
+  @media (max-width: 900px) {
+    .overview-grid   { grid-template-columns: 1fr; }
+    .overview-grid-3 { grid-template-columns: 1fr; }
+  }
+
+  .chart-wrap {
+    position: relative;
+    height: 180px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page header -->
+<div class="page-header">
+  <div class="page-title">// Overview</div>
+  <div class="page-subtitle">Cowrie Honeypot — Attack Summary</div>
+</div>
+
+<!-- Stat cards -->
+<div class="stats-grid mb-24">
+
+  <div class="stat-card fadein-1">
+    <div class="stat-value">{{ stats.total_sessions }}</div>
+    <div class="stat-label">Total Sessions</div>
+  </div>
+
+  <div class="stat-card fadein-2">
+    <div class="stat-value">{{ stats.total_attempts }}</div>
+    <div class="stat-label">Auth Attempts</div>
+  </div>
+
+  <div class="stat-card danger fadein-3">
+    <div class="stat-value">{{ stats.successful_logins }}</div>
+    <div class="stat-label">Successful Logins</div>
+  </div>
+
+  <div class="stat-card fadein-4">
+    <div class="stat-value">{{ stats.unique_ips }}</div>
+    <div class="stat-label">Unique IPs</div>
+  </div>
+
+  <div class="stat-card warn fadein-5">
+    <div class="stat-value">{{ stats.sessions_with_commands }}</div>
+    <div class="stat-label">Sessions w/ Commands</div>
+  </div>
+
+</div>
+
+<!-- Timeline + HASSH -->
+<div class="overview-grid mb-16">
+
+  <!-- Activity timeline -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Attack Timeline</div>
+      <div class="text-mono text-dim" style="font-size:10px;">Sessions per day</div>
+    </div>
+    <div class="card-body">
+      <div class="chart-wrap">
+        <canvas id="timelineChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- HASSH fingerprints -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Client Fingerprints</div>
+      <div class="text-mono text-dim" style="font-size:10px;">HASSH signatures</div>
+    </div>
+    <div class="card-body">
+      {% if hassh %}
+        <div class="bar-list">
+          {% set max_hassh = hassh[0].session_count %}
+          {% for h in hassh %}
+          <div class="bar-row">
+            <div class="bar-label" title="{{ h.hassh }}">{{ h.hassh[:16] }}…</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:{{ (h.session_count / max_hassh * 100)|int }}%"></div>
+            </div>
+            <div class="bar-count">{{ h.session_count }}</div>
+          </div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:-4px;padding-left:0;">
+            {{ h.client_version or "unknown client" }}
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">No fingerprint data yet</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Credentials -->
+<div class="overview-grid-3">
+
+  <!-- Top usernames -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Top Usernames</div>
+    </div>
+    <div class="card-body">
+      {% if top_usernames %}
+        <div class="bar-list">
+          {% set max_u = top_usernames[0].count %}
+          {% for u in top_usernames %}
+          <div class="bar-row">
+            <div class="bar-label" title="{{ u.username }}">{{ u.username or "(empty)" }}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:{{ (u.count / max_u * 100)|int }}%"></div>
+            </div>
+            <div class="bar-count">{{ u.count }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">No data yet</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Top passwords -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Top Passwords</div>
+    </div>
+    <div class="card-body">
+      {% if top_passwords %}
+        <div class="bar-list">
+          {% set max_p = top_passwords[0].count %}
+          {% for p in top_passwords %}
+          <div class="bar-row">
+            <div class="bar-label" title="{{ p.password }}">{{ p.password or "(empty)" }}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:{{ (p.count / max_p * 100)|int }}%"></div>
+            </div>
+            <div class="bar-count">{{ p.count }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">No data yet</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Recent activity -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Quick Links</div>
+    </div>
+    <div class="card-body">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <a href="/sessions" style="
+          display:block;
+          padding:10px 14px;
+          border:1px solid var(--border2);
+          font-family:var(--mono);
+          font-size:11px;
+          color:var(--text);
+          letter-spacing:0.1em;
+          transition:border-color 0.2s,color 0.2s;
+        " onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+           onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text)'">
+          ◫ &nbsp; View All Sessions →
+        </a>
+        <a href="/map" style="
+          display:block;
+          padding:10px 14px;
+          border:1px solid var(--border2);
+          font-family:var(--mono);
+          font-size:11px;
+          color:var(--text);
+          letter-spacing:0.1em;
+          transition:border-color 0.2s,color 0.2s;
+        " onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+           onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text)'">
+          ◎ &nbsp; View IP Map →
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  // Timeline chart
+  const timelineData = {{ timeline | tojson }};
+
+  const labels = timelineData.map(r => r.date);
+  const counts = timelineData.map(r => r.count);
+
+  const ctx = document.getElementById('timelineChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: counts,
+        backgroundColor: 'rgba(0, 229, 255, 0.15)',
+        borderColor:     'rgba(0, 229, 255, 0.8)',
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0d1117',
+          borderColor:     '#1c2533',
+          borderWidth: 1,
+          titleColor:  '#00e5ff',
+          bodyColor:   '#cdd9e5',
+          titleFont:   { family: 'Share Tech Mono', size: 11 },
+          bodyFont:    { family: 'Share Tech Mono', size: 11 },
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#4a5a6a',
+            font: { family: 'Share Tech Mono', size: 9 },
+            maxRotation: 45,
+          },
+          grid: { color: '#1c2533' },
+        },
+        y: {
+          ticks: {
+            color: '#4a5a6a',
+            font: { family: 'Share Tech Mono', size: 9 },
+            stepSize: 1,
+          },
+          grid: { color: '#1c2533' },
+          beginAtZero: true,
+        }
+      }
+    }
+  });
+</script>
+{% endblock %}

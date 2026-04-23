@@ -1,0 +1,17 @@
+[Unit]
+Description=Honeypot Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=cowrie
+Group=cowrie
+WorkingDirectory=/home/cowrie/honeypot/dashboard
+ExecStart=/home/cowrie/honeypot/dashboard/.venv/bin/python3 /home/cowrie/honeypot/dashboard/dashboard.py \
+    --db /home/cowrie/honeypot/logs/analysis/honeypot.db \
+    --port 5000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+
+{% block title %}Sessions — Honeypot Dashboard{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Toolbar ── */
+  .sessions-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 7px 12px;
+    outline: none;
+    width: 220px;
+    transition: border-color 0.2s;
+  }
+
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--dim); }
+
+  .date-input {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 7px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+    color-scheme: dark;
+  }
+
+  .date-input:focus { border-color: var(--accent); }
+
+  .date-sep {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    flex-shrink: 0;
+  }
+
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    padding: 7px 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+  }
+
+  .filter-btn:hover        { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active       { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active-danger { border-color: var(--danger); color: var(--danger); }
+  .filter-btn.active-warn  { border-color: var(--warn);   color: var(--warn); }
+
+  .toolbar-sep {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .apply-btn {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    padding: 7px 14px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background 0.2s;
+  }
+
+  .apply-btn:hover { background: rgba(0,229,255,0.2); }
+
+  .toolbar-count {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+
+  /* ── Score bar ── */
+  .score-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .score-track {
+    width: 60px;
+    height: 3px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .score-fill { height: 100%; }
+  .score-fill.critical { background: var(--danger); }
+  .score-fill.high     { background: var(--warn); }
+  .score-fill.medium   { background: var(--accent); }
+  .score-fill.low      { background: var(--dim); }
+
+  .score-num {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    width: 24px;
+    flex-shrink: 0;
+  }
+
+  /* ── Command count ── */
+  .cmd-count {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 7px;
+    border: 1px solid var(--border2);
+    color: var(--dim);
+  }
+
+  .cmd-count.has-cmds {
+    border-color: var(--warn);
+    color: var(--warn);
+  }
+
+  /* ── Row click ── */
+  .sessions-table tbody tr { cursor: pointer; }
+
+  /* ── Pagination ── */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+
+  .page-btn {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    padding: 5px 11px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+  }
+
+  .page-btn:hover       { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+  .page-btn.active      { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .page-btn.disabled    { opacity: 0.3; pointer-events: none; }
+
+  .page-ellipsis {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    padding: 0 4px;
+  }
+
+  .page-info {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    margin-left: 8px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="page-header">
+  <div class="page-title">// Sessions</div>
+  <div class="page-subtitle">{{ total }} total recorded</div>
+</div>
+
+<!-- Filters — all server-side via form GET -->
+<form method="get" action="/sessions" id="filterForm">
+  <div class="sessions-toolbar">
+
+    <!-- Search -->
+    <input
+      class="search-input"
+      type="text"
+      name="search"
+      placeholder="Search IP, session ID…"
+      value="{{ search }}"
+    >
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Date range -->
+    <input class="date-input" type="date" name="date_from" value="{{ date_from }}" id="dateFrom">
+    <span class="date-sep">to</span>
+    <input class="date-input" type="date" name="date_to"   value="{{ date_to }}"   id="dateTo">
+
+    <!-- Preset shortcuts -->
+    <button type="button" class="filter-btn" onclick="setPreset(7)">7d</button>
+    <button type="button" class="filter-btn" onclick="setPreset(30)">30d</button>
+    <button type="button" class="filter-btn" onclick="clearDates()">All time</button>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Threat label filters — submit form with label value -->
+    <button type="submit" name="label" value="all"
+      class="filter-btn {% if label == 'all' %}active{% endif %}">All</button>
+    <button type="submit" name="label" value="CRITICAL"
+      class="filter-btn {% if label == 'CRITICAL' %}active-danger{% endif %}">Critical</button>
+    <button type="submit" name="label" value="HIGH"
+      class="filter-btn {% if label == 'HIGH' %}active-warn{% endif %}">High</button>
+    <button type="submit" name="label" value="MEDIUM"
+      class="filter-btn {% if label == 'MEDIUM' %}active{% endif %}">Medium</button>
+    <button type="submit" name="label" value="LOW"
+      class="filter-btn {% if label == 'LOW' %}active{% endif %}">Low</button>
+
+    <div class="toolbar-sep"></div>
+
+    <button type="submit" class="apply-btn">Apply ↵</button>
+
+    <div class="toolbar-count">{{ sessions|length }} of {{ total }} shown</div>
+
+  </div>
+
+  <!-- Hidden: preserve page=1 on new filter -->
+  <input type="hidden" name="page" value="1" id="hiddenPage">
+</form>
+
+<!-- Table -->
+<div class="card">
+  {% if sessions %}
+  <table class="data-table sessions-table">
+    <thead>
+      <tr>
+        <th>Session ID</th>
+        <th>Source IP</th>
+        <th>Date</th>
+        <th>Duration</th>
+        <th>Attempts</th>
+        <th>Commands</th>
+        <th>Result</th>
+        <th>Threat</th>
+        <th>User</th>
+        <th>Score</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sessions %}
+      {% set threat = s.threat %}
+      {% set tlabel = threat.label | lower %}
+      <tr onclick="window.location='/session/{{ s.session_id }}'">
+
+        <td class="text-mono text-accent">{{ s.session_id[:12] }}</td>
+
+        <td class="text-mono">{{ s.src_ip }}</td>
+
+        <td class="text-mono text-dim">
+          {{ s.start_time[:10] if s.start_time else '—' }}
+        </td>
+
+        <td class="text-mono text-dim">
+          {% if s.duration_seconds %}{{ s.duration_seconds | int }}s{% else %}—{% endif %}
+        </td>
+
+        <td class="text-mono">{{ s.login_attempts }}</td>
+
+        <td>
+          <span class="cmd-count {% if s.commands_run > 0 %}has-cmds{% endif %}">
+            {{ s.commands_run }}
+          </span>
+        </td>
+
+        <td>
+          {% if s.login_success %}
+            <span class="badge badge-ok">SUCCESS</span>
+          {% else %}
+            <span class="badge badge-fail">FAILED</span>
+          {% endif %}
+        </td>
+
+        <td>
+          <span class="badge badge-{{ tlabel }}">{{ threat.label }}</span>
+        </td>
+
+        <td class="text-mono text-dim">{{ s.login_user or '—' }}</td>
+
+        <td>
+          <div class="score-bar">
+            <div class="score-track">
+              <div class="score-fill {{ tlabel }}" style="width:{{ threat.score }}%"></div>
+            </div>
+            <div class="score-num">{{ threat.score }}</div>
+          </div>
+        </td>
+
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty">No sessions match the current filters.</div>
+  {% endif %}
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="pagination">
+
+  <a class="page-btn {% if page == 1 %}disabled{% endif %}"
+     href="/sessions?page={{ page - 1 }}&search={{ search }}&label={{ label }}&date_from={{ date_from }}&date_to={{ date_to }}">
+    ← Prev
+  </a>
+
+  {% for p in range(1, total_pages + 1) %}
+    {% if p == page %}
+      <span class="page-btn active">{{ p }}</span>
+    {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+      <a class="page-btn"
+         href="/sessions?page={{ p }}&search={{ search }}&label={{ label }}&date_from={{ date_from }}&date_to={{ date_to }}">
+        {{ p }}
+      </a>
+    {% elif p == page - 3 or p == page + 3 %}
+      <span class="page-ellipsis">…</span>
+    {% endif %}
+  {% endfor %}
+
+  <a class="page-btn {% if page == total_pages %}disabled{% endif %}"
+     href="/sessions?page={{ page + 1 }}&search={{ search }}&label={{ label }}&date_from={{ date_from }}&date_to={{ date_to }}">
+    Next →
+  </a>
+
+  <span class="page-info">Page {{ page }} of {{ total_pages }} &nbsp;·&nbsp; {{ total }} results</span>
+
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  function setPreset(days) {
+    const to   = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - days);
+    document.getElementById('dateFrom').value = from.toISOString().slice(0, 10);
+    document.getElementById('dateTo').value   = to.toISOString().slice(0, 10);
+    document.getElementById('hiddenPage').value = 1;
+    document.getElementById('filterForm').submit();
+  }
+
+  function clearDates() {
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value   = '';
+    document.getElementById('hiddenPage').value = 1;
+    document.getElementById('filterForm').submit();
+  }
+</script>
+{% endblock %}
