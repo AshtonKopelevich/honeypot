@@ -1,6 +1,8 @@
 [Unit]
 Description=Rebuild Cowrie analysis DB after log update
 After=network.target
+StartLimitIntervalSec=1
+StartLimitBurst=1
 
 [Service]
 Type=oneshot
