@@ -278,7 +278,7 @@
         <span class="popup-key">First seen</span>
         <span class="popup-val">${(ip.first_seen || '—').slice(0, 10)}</span>
       </div>
-      <a class="popup-link" href="/sessions">View sessions →</a>
+      <a class="popup-link" href="/sessions?search=${ip.src_ip}">View sessions →</a>
     `;
   }
 
