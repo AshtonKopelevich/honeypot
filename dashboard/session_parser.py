@@ -266,7 +266,7 @@ def write_csv(sessions, auth_attempts, raw_events, output_dir: Path):
     def dump(name, rows, fieldnames):
         path = output_dir / f"{name}.csv"
         with open(path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=fieldnames, escapechar='\\', doublequote=True)
             writer.writeheader()
             writer.writerows(rows)
         print(f"  Wrote {len(rows):>6} rows → {path}")
